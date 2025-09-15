@@ -1,0 +1,18 @@
+# This file adds the new crawler service to your stack.
+# Run with: docker compose -f docker-compose.yml -f docker-compose.override.yml up --build
+
+version: "3.8"
+
+services:
+  crawler:
+    build:
+      context: ./crawler
+      dockerfile: Dockerfile
+    depends_on:
+      - agentic-kg
+    env_file: ./.env
+    environment:
+      - AGENTIC_KG_URL=http://agentic-kg:8000
+    ports:
+      - "8001:8001"
+    restart: unless-stopped

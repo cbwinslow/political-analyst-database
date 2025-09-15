@@ -1,0 +1,45 @@
+# ==============================================================================
+# Kong API Gateway - Declarative Configuration
+# ==============================================================================
+# This file defines all the routes for the Project Sentinel platform. Kong will
+# read this configuration on startup and route incoming traffic from port 8000
+# to the appropriate backend service.
+# ==============================================================================
+
+_format_version: "3.0"
+
+services:
+  - name: agentic-kg-service
+    url: http://agentic-kg:8000 # The core API for analysis and data interaction
+    routes:
+      - name: agentic-kg-routes
+        paths:
+          - /api/v1/kg
+
+  - name: crawler-service
+    url: http://crawler:8001 # The service for initiating crawl jobs
+    routes:
+      - name: crawler-routes
+        paths:
+          - /api/v1/crawl
+
+  - name: frontend-service
+    url: http://frontend:3000 # The Next.js user interface
+    routes:
+      - name: frontend-routes
+        paths:
+          - /
+
+plugins:
+  - name: cors
+    service: agentic-kg-service
+    config:
+      origins:
+        - "*" # For development; restrict in production
+      methods:
+        - GET
+        - POST
+        - OPTIONS
+      headers:
+        - Content-Type
+      preflight_continue: false
