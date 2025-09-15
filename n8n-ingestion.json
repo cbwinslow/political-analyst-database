@@ -1,0 +1,133 @@
+{
+  "name": "Full Document Ingestion Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "path": "ingest-webhook",
+        "options": {}
+      },
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "webhookId": "sentinel-ingest-trigger"
+    },
+    {
+      "parameters": {
+        "url": "http://crawler:8001/api/v1/crawl/ingest-url",
+        "options": {
+          "body": "={{$json.body}}"
+        }
+      },
+      "name": "Call Crawler Service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.status}}",
+              "operation": "equal",
+              "value2": "crawl_job_started"
+            }
+          ]
+        }
+      },
+      "name": "Check Crawl Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "message": "✅ Ingestion pipeline started successfully for URL: {{$node[\"Webhook Trigger\"].json[\"body\"][\"url\"]}}",
+        "options": {}
+      },
+      "name": "Success Log",
+      "type": "n8n-nodes-base.log",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "message": "🔥 ERROR: Failed to start crawl job. Response: {{$json}}",
+        "level": "error",
+        "options": {}
+      },
+      "name": "Error Log",
+      "type": "n8n-nodes-base.log",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call Crawler Service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Crawler Service": {
+      "main": [
+        [
+          {
+            "node": "Check Crawl Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Crawl Status": {
+      "main": [
+        [
+          {
+            "node": "Success Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
