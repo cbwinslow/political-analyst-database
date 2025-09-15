@@ -1,0 +1,178 @@
+# ==============================================================================
+# Political Intelligence Platform - Enhanced Requirements
+# Integration with MCP-Crawl4AI-RAG, Graphiti, Zep, and LlamaIndex
+# ==============================================================================
+
+# Core dependencies (existing)
+fastapi>=0.104.1
+uvicorn>=0.24.0
+pydantic>=2.5.0
+sqlalchemy>=2.0.23
+alembic>=1.13.0
+psycopg2-binary>=2.9.9
+
+# Web crawling (existing + enhanced)
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+aiohttp>=3.9.0
+
+# Document processing (existing)
+pypdf2>=3.0.1
+python-docx>=1.1.0
+
+# Vector embeddings and ML (existing)
+sentence-transformers>=2.2.2
+torch>=2.1.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Knowledge graph and RAG (existing)
+neo4j>=5.14.0
+chromadb>=0.4.18
+
+# Social media APIs (existing)
+tweepy>=4.14.0
+
+# Data processing (existing)
+pandas>=2.1.0
+spacy>=3.7.0
+nltk>=3.8.1
+textblob>=0.17.1
+
+# Configuration and utilities (existing)
+python-dotenv>=1.0.0
+pydantic-settings>=2.1.0
+
+# Testing (existing)
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.25.0
+
+# ==============================================================================
+# NEW INTEGRATIONS
+# ==============================================================================
+
+# MCP Crawl4AI RAG Integration
+crawl4ai>=0.3.0
+mcp>=1.0.0
+supabase>=2.0.0
+sse-starlette>=2.0.0
+
+# Crawl4AI dependencies
+playwright>=1.40.0
+selenium>=4.15.0
+lxml>=4.9.0
+markdownify>=0.11.0
+
+# Enhanced RAG capabilities
+rank-bm25>=0.2.2
+sentence-transformers[onnx]>=2.2.2
+cross-encoder>=1.2.0
+
+# Graphiti Temporal Knowledge Graph
+graphiti-core>=0.17.0
+graphiti-core[neo4j]>=0.17.0
+
+# Graphiti optional backends
+graphiti-core[falkordb]>=0.17.0
+graphiti-core[kuzu]>=0.17.0
+graphiti-core[neptune]>=0.17.0
+
+# Zep Memory Platform Integration
+zep-cloud>=2.0.0
+
+# LlamaIndex Advanced Document Processing
+llama-index>=0.10.0
+llama-index-core>=0.10.0
+llama-index-embeddings-openai>=0.1.0
+llama-index-llms-openai>=0.1.0
+llama-index-vector-stores-chroma>=0.1.0
+llama-index-vector-stores-postgres>=0.1.0
+llama-index-readers-web>=0.1.0
+llama-index-readers-file>=0.1.0
+
+# Multi-modal document processing
+llama-index-multi-modal-llms-openai>=0.1.0
+pytesseract>=0.3.10
+pdf2image>=1.16.3
+pillow>=10.0.0
+
+# Advanced LLM integrations
+openai>=1.30.0
+anthropic>=0.25.0
+google-generativeai>=0.5.0
+groq>=0.4.0
+
+# Enhanced vector databases
+qdrant-client>=1.7.0
+weaviate-client>=4.0.0
+pinecone-client>=3.0.0
+
+# Graph databases and analytics
+networkx>=3.2.0
+igraph>=0.11.0
+neo4j-driver>=5.14.0
+
+# Temporal and time-series processing
+arrow>=1.3.0
+pendulum>=3.0.0
+dateutil>=2.8.0
+
+# Enhanced NLP and ML
+transformers>=4.30.0
+datasets>=2.14.0
+accelerate>=0.20.0
+optimum>=1.12.0
+
+# Monitoring and observability
+prometheus-client>=0.17.0
+structlog>=23.1.0
+rich>=13.5.0
+
+# Async and concurrency
+asyncio-throttle>=1.0.2
+aiofiles>=23.2.1
+aiodns>=3.1.0
+
+# Security and validation
+cryptography>=41.0.0
+pyjwt>=2.8.0
+passlib>=1.7.4
+
+# Development and debugging
+ipython>=8.15.0
+jupyter>=1.0.0
+debugpy>=1.7.0
+
+# Additional utilities
+click>=8.1.0
+typer>=0.9.0
+tqdm>=4.66.0
+xmltodict>=0.13.0
+jsonschema>=4.19.0
+
+# ==============================================================================
+# OPTIONAL EXTRAS FOR SPECIFIC USE CASES
+# ==============================================================================
+
+# For GPU acceleration (optional)
+# torch[cuda]>=2.1.0
+# sentence-transformers[cuda]>=2.2.2
+
+# For advanced OCR (optional)
+# easyocr>=1.7.0
+# paddleocr>=2.7.0
+
+# For advanced audio/video processing (optional)
+# whisper>=1.1.0
+# moviepy>=1.0.3
+
+# For additional LLM providers (optional)
+# together>=0.2.0
+# replicate>=0.15.0
+# huggingface-hub>=0.16.0
+
+# For advanced graph analytics (optional)
+# graph-tool>=2.45
+# cdlib>=0.3.0
+# pyvis>=0.3.0

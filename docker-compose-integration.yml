@@ -1,0 +1,424 @@
+# ==============================================================================
+# Political Intelligence Platform - Enhanced Docker Compose Stack
+# Integration-ready configuration for MCP-Crawl4AI-RAG, Graphiti, Zep, LlamaIndex
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # CORE API & GATEWAY (Enhanced)
+  # ----------------------------------------------------------------------------
+  kong:
+    image: kong:latest
+    container_name: kong_gateway
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/etc/kong/kong.yml
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_ERROR_LOG=/dev/stderr
+    volumes:
+      - ./kong:/etc/kong
+    ports:
+      - "8000:8000" # Proxy
+      - "8443:8443" # Proxy SSL
+      - "8001:8001" # Admin API
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ENHANCED POLITICAL INTELLIGENCE API
+  # ----------------------------------------------------------------------------
+  political-intelligence-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - REQUIREMENTS_FILE=requirements-integration.txt
+    container_name: political_api
+    environment:
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-poladmin}:${POSTGRES_PASSWORD:-polpass}@postgres:5432/${POSTGRES_DB:-policydocs}
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4jpass}
+      - GRAPHITI_URI=bolt://neo4j:7687
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ZEP_API_KEY=${ZEP_API_KEY}
+      - USE_CONTEXTUAL_EMBEDDINGS=true
+      - USE_HYBRID_SEARCH=true
+      - USE_AGENTIC_RAG=true
+      - USE_KNOWLEDGE_GRAPH=true
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - neo4j
+      - qdrant
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # MCP CRAWL4AI RAG SERVER
+  # ----------------------------------------------------------------------------
+  mcp-crawl4ai-server:
+    build:
+      context: ./integrations/mcp-crawl4ai
+      dockerfile: Dockerfile
+    container_name: mcp_crawl4ai_server
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8051
+      - TRANSPORT=sse
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - USE_CONTEXTUAL_EMBEDDINGS=true
+      - USE_HYBRID_SEARCH=true
+      - USE_AGENTIC_RAG=true
+      - USE_RERANKING=true
+      - USE_KNOWLEDGE_GRAPH=true
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4jpass}
+    ports:
+      - "8051:8051"
+    depends_on:
+      - neo4j
+    volumes:
+      - crawl4ai_data:/app/data
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # GRAPHITI MCP SERVER
+  # ----------------------------------------------------------------------------
+  graphiti-mcp-server:
+    image: getzep/graphiti-mcp:latest
+    container_name: graphiti_mcp_server
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-neo4jpass}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GRAPHITI_TELEMETRY_ENABLED=false
+    ports:
+      - "8052:8000"
+    depends_on:
+      - neo4j
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # DATA PERSISTENCE LAYER (Enhanced)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-poladmin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-polpass}
+      - POSTGRES_DB=${POSTGRES_DB:-policydocs}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db:/docker-entrypoint-initdb.d:ro
+      - ./integrations/sql:/docker-entrypoint-initdb.d/integrations:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5-enterprise
+    container_name: neo4j_db
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4jpass}
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_dbms_memory_heap_initial__size=1G
+      - NEO4J_dbms_memory_heap_max__size=2G
+      - NEO4J_dbms_memory_pagecache_size=1G
+    volumes:
+      - neo4j_data:/data
+      - ./integrations/neo4j:/var/lib/neo4j/import
+    ports:
+      - "7474:7474" # Browser UI
+      - "7687:7687" # Bolt port
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Enhanced Qdrant for vector storage
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_db
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ./integrations/qdrant:/qdrant/config
+    ports:
+      - "6333:6333" # REST API
+      - "6334:6334" # gRPC
+    restart: unless-stopped
+
+  # Enhanced OpenSearch for full-text search
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch_node
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+      - plugins.security.disabled=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600" # Performance Analyzer
+    restart: unless-stopped
+
+  # Message queue for async processing
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_broker
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-admin}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-adminpass}
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # AI INFERENCE & UI (Enhanced)
+  # ----------------------------------------------------------------------------
+  localai:
+    image: localai/localai:latest
+    container_name: localai_inference
+    ports:
+      - "8080:8080"
+    volumes:
+      - localai_models:/models
+      - ./integrations/localai:/build/models
+    environment:
+      - THREADS=4
+      - CONTEXT_SIZE=4096
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_inference
+    ports:
+        - "11434:11434"
+    volumes:
+        - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=3
+    restart: unless-stopped
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    ports:
+      - "8090:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    depends_on:
+      - localai
+      - ollama
+    environment:
+      - OPENAI_API_BASE_URL=http://localai:8080/v1
+      - OLLAMA_BASE_URL=http://ollama:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # INTEGRATION SERVICES
+  # ----------------------------------------------------------------------------
+  
+  # Crawl4AI Browser Service
+  crawl4ai-browser:
+    image: browserless/chrome:latest
+    container_name: crawl4ai_browser
+    ports:
+      - "3000:3000"
+    environment:
+      - MAX_CONCURRENT_SESSIONS=10
+      - CONNECTION_TIMEOUT=60000
+      - MAX_QUEUE_LENGTH=50
+    restart: unless-stopped
+
+  # Document Processing Service
+  document-processor:
+    build:
+      context: ./integrations/document-processor
+      dockerfile: Dockerfile
+    container_name: document_processor
+    environment:
+      - POSTGRES_URL=postgresql://${POSTGRES_USER:-poladmin}:${POSTGRES_PASSWORD:-polpass}@postgres:5432/${POSTGRES_DB:-policydocs}
+      - QDRANT_URL=http://qdrant:6333
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./data/documents:/app/documents
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - qdrant
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ORCHESTRATION & WORKFLOW
+  # ----------------------------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n_orchestrator
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./integrations/n8n:/home/node/.n8n/custom
+    environment:
+      - GENERIC_TIMEZONE=America/New_York
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-adminpass}
+    restart: unless-stopped
+
+  flowise:
+    image: flowiseai/flowise:latest
+    container_name: flowise_builder
+    ports:
+      - "3001:3000"
+    volumes:
+      - flowise_data:/root/.flowise
+    environment:
+      - FLOWISE_USERNAME=${FLOWISE_USER:-admin}
+      - FLOWISE_PASSWORD=${FLOWISE_PASSWORD:-adminpass}
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ENHANCED OBSERVABILITY & MONITORING
+  # ----------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - ./integrations/prometheus:/etc/prometheus/integrations
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_dashboard
+    ports:
+      - "3002:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./integrations/grafana:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-adminpass}
+      - GF_INSTALL_PLUGINS=redis-datasource,neo4j-datasource
+    restart: unless-stopped
+
+  netdata:
+    image: netdata/netdata:latest
+    container_name: netdata_system
+    ports:
+      - "19999:19999"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    restart: unless-stopped
+    
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: langfuse_ai_obs
+    depends_on:
+      - postgres
+    ports:
+      - "3003:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-poladmin}:${POSTGRES_PASSWORD:-polpass}@postgres:5432/${POSTGRES_DB:-policydocs}
+      - NEXTAUTH_SECRET=${LANGFUSE_SECRET:-mysecret}
+      - SALT=${LANGFUSE_SALT:-mysecret}
+      - LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES=true
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # INTEGRATION HEALTH CHECKS
+  # ----------------------------------------------------------------------------
+  health-checker:
+    image: alpine:latest
+    container_name: integration_health_checker
+    command: |
+      sh -c "
+        apk add --no-cache curl &&
+        while true; do
+          echo 'Checking service health...'
+          curl -f http://political-intelligence-api:8080/health || echo 'API unhealthy'
+          curl -f http://mcp-crawl4ai-server:8051/health || echo 'MCP server unhealthy'
+          curl -f http://graphiti-mcp-server:8000/health || echo 'Graphiti MCP unhealthy'
+          curl -f http://qdrant:6333/health || echo 'Qdrant unhealthy'
+          sleep 60
+        done
+      "
+    depends_on:
+      - political-intelligence-api
+      - mcp-crawl4ai-server
+      - graphiti-mcp-server
+      - qdrant
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  qdrant_data:
+  opensearch_data:
+  rabbitmq_data:
+  localai_models:
+  ollama_models:
+  openwebui_data:
+  n8n_data:
+  flowise_data:
+  prometheus_data:
+  grafana_data:
+  crawl4ai_data:
+
+networks:
+  default:
+    name: political_intelligence_network
+    driver: bridge
