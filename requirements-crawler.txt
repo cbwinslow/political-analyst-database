@@ -1,1 +1,7 @@
-fastapiuvicorn[standard]httpxbeautifulsoup4lxmlpython-dotenvpydantic
+fastapi
+uvicorn[standard]
+httpx
+beautifulsoup4
+lxml
+python-dotenv
+pydantic
