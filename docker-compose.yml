@@ -145,7 +145,7 @@ services:
     restart: unless-stopped
 
   openwebui:
-    image: openwebui/openwebui:main
+    image: ghcr.io/open-webui/open-webui:main
     container_name: openwebui
     ports:
       - "8090:8080"
