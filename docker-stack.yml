@@ -1,0 +1,248 @@
+# ==============================================================================
+# Political Intelligence Platform - Comprehensive V2 Docker Compose Stack
+# ==============================================================================
+# This stack is designed to be modular and comprehensive, based on your V2
+# architectural plan. It includes services for data persistence, AI inference,
+# orchestration, observability, and more.
+#
+# To run: docker compose up -d
+# To shutdown: docker compose down -v
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # CORE API & GATEWAY
+  # ----------------------------------------------------------------------------
+  kong:
+    image: kong:latest
+    container_name: kong_gateway
+    environment:
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/etc/kong/kong.yml
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stderr
+      - KONG_ADMIN_ERROR_LOG=/dev/stderr
+    volumes:
+      - ./kong:/etc/kong
+    ports:
+      - "8000:8000" # Proxy
+      - "8443:8443" # Proxy SSL
+      - "8001:8001" # Admin API
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # DATA PERSISTENCE LAYER
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: postgres_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-poladmin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-polpass}
+      - POSTGRES_DB=${POSTGRES_DB:-policydocs}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5-enterprise # Enterprise for more features, community is also fine
+    container_name: neo4j_db
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4jpass}
+      - NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+    volumes:
+      - neo4j_data:/data
+    ports:
+      - "7474:7474" # Browser UI
+      - "7687:7687" # Bolt port
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_db
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333" # REST API
+      - "6334:6334" # gRPC
+    restart: unless-stopped
+
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch_node
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600" # Performance Analyzer
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_broker
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # AI INFERENCE & UI
+  # ----------------------------------------------------------------------------
+  localai:
+    image: localai/localai:latest
+    container_name: localai_inference
+    ports:
+      - "8080:8080"
+    volumes:
+      - localai_models:/models
+    # deploy: # Uncomment for GPU support
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_inference
+    ports:
+        - "11434:11434"
+    volumes:
+        - ollama_models:/root/.ollama
+    restart: unless-stopped
+
+  openwebui:
+    image: openwebui/openwebui:main
+    container_name: openwebui
+    ports:
+      - "8090:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    depends_on:
+      - localai
+      - ollama
+    extra_hosts: # Allows OpenWebUI to easily connect to other containers
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # ORCHESTRATION & AGENT PLATFORMS
+  # ----------------------------------------------------------------------------
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n_orchestrator
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    environment:
+      - GENERIC_TIMEZONE=America/New_York
+    restart: unless-stopped
+
+  flowise:
+    image: flowiseai/flowise:latest
+    container_name: flowise_builder
+    ports:
+      - "3000:3000"
+    volumes:
+      - flowise_data:/root/.flowise
+    restart: unless-stopped
+
+  # ----------------------------------------------------------------------------
+  # OBSERVABILITY & MONITORING
+  # ----------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus_monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana_dashboard
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: unless-stopped
+
+  netdata:
+    image: netdata/netdata:latest
+    container_name: netdata_system
+    ports:
+      - "19999:19999"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    restart: unless-stopped
+    
+  langfuse:
+    image: langfuse/langfuse:latest
+    container_name: langfuse_ai_obs
+    depends_on:
+      - postgres
+    ports:
+      - "3002:3000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-poladmin}:${POSTGRES_PASSWORD:-polpass}@postgres:5432/${POSTGRES_DB:-policydocs}
+      - NEXTAUTH_SECRET=mysecret
+      - SALT=mysecret
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  qdrant_data:
+  opensearch_data:
+  rabbitmq_data:
+  localai_models:
+  ollama_models:
+  openwebui_data:
+  n8n_data:
+  flowise_data:
+  prometheus_data:
+  grafana_data:
